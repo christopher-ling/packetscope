@@ -204,6 +204,35 @@ async def rdns(ips):
     return {ip: name for ip, name in res if name}
 
 
+FWD_HEADERS = ("CF-Connecting-IP", "True-Client-IP", "X-Real-IP", "X-Forwarded-For", "Forwarded")
+
+
+def viewer_ip(request):
+    """Public IP of the browser user, or None. Returns 'local' when the page is opened on the tracer itself."""
+    seen = False
+    for h in FWD_HEADERS:
+        v = request.headers.get(h)
+        if not v:
+            continue
+        seen = True
+        for part in re.split(r"[,;]\s*", v):
+            ip = part.strip()
+            if ip.lower().startswith("for="):
+                ip = ip[4:].strip('"[]')
+            if ip.count(":") == 1 and "." in ip:
+                ip = ip.split(":")[0]
+            if is_public(ip):
+                return ip
+    if seen or not request.remote:
+        return None
+    try:
+        if ipaddress.ip_address(request.remote).is_loopback:
+            return "local"
+    except ValueError:
+        return None
+    return request.remote if is_public(request.remote) else None
+
+
 async def self_info():
     if not SELF_INFO:
         try:
@@ -230,7 +259,16 @@ async def trace_handler(request: web.Request):
         return resp
 
     me = await self_info()
-    await send("start", {"host": host, "url": url, "scheme": scheme, "port": port, "client": me})
+    vip = viewer_ip(request)
+    print("viewer", vip, request.remote, {h: request.headers[h] for h in FWD_HEADERS if h in request.headers}, flush=True)
+    viewer = None
+    if vip == "local" or (vip and vip == me.get("query")):
+        viewer = {"same_as_probe": True}
+    elif vip:
+        g = (await geolocate([vip])).get(vip)
+        if g:
+            viewer = {**g, "same_as_probe": False}
+    await send("start", {"host": host, "url": url, "scheme": scheme, "port": port, "client": me, "viewer": viewer})
 
     dns = await dns_trace(host)
     if not dns["ips"]:

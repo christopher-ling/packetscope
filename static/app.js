@@ -10,6 +10,7 @@ let state = null;
 let runId = 0;
 let arcs = [], rings = [];
 let speed = 1;
+let me = null;
 
 const world = Globe()($('globe'))
   .globeImageUrl('vendor/earth-night.jpg')
@@ -62,6 +63,17 @@ $('chips').onclick = (e) => { if (e.target.classList.contains('chip')) { $('url'
 $('form').onsubmit = (e) => { e.preventDefault(); start(); };
 $('speed').oninput = (e) => { speed = +e.target.value; };
 $('replay').onclick = () => state && animate(state);
+$('locate').onclick = () => {
+  if (!navigator.geolocation) { $('meInfo').textContent = 'Geolocation not supported — using IP estimate.'; return; }
+  $('meInfo').textContent = 'Asking your browser…';
+  navigator.geolocation.getCurrentPosition((p) => {
+    me = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
+    $('locate').classList.add('on');
+    $('meInfo').textContent = `Pinned ${me.lat.toFixed(3)}, ${me.lon.toFixed(3)} (±${Math.round(me.acc)} m)`;
+    if (state) { build(state); animate(state); }
+  }, (err) => { $('meInfo').textContent = `Location ${err.code === 1 ? 'denied' : 'unavailable'} — using IP estimate.`; },
+  { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 });
+};
 $('legend').innerHTML = [['dns', 'DNS lookup'], ['tcp', 'TCP handshake'], ['tls', 'TLS handshake'], ['http', 'HTTP request'], ['data', 'Response data']]
   .map(([k, l]) => `<span><i style="background:${COLORS[k]};box-shadow:0 0 8px ${COLORS[k]}"></i>${l}</span>`).join('');
 renderWaterfall(null);
@@ -109,9 +121,22 @@ function start() {
 
 /* ---------- model ---------- */
 function build(d) {
-  if (d.route.probe) d.client = { ...d.client, ...d.route.probe };
+  d.client = { ...(d.client0 ??= d.client), ...(d.route.probe || {}) };
+  const local = !!d.viewer?.same_as_probe;
+  if (local && me) d.client = { ...d.client, lat: me.lat, lon: me.lon };
   const c = d.client;
-  d.clientNode = { lat: c.lat, lng: c.lon, name: `You (probe) · ${c.city}`, ip: c.query, cc: c.countryCode, kind: 'client' };
+  d.clientNode = { lat: c.lat, lng: c.lon, name: `${local ? 'You' : 'Tracer'} · ${c.city}`, ip: c.query, cc: c.countryCode, kind: 'client' };
+  d.viewerNode = null;
+  if (!local) {
+    const ipv = d.viewer?.lat != null ? d.viewer : null;
+    const v = me || ipv;
+    if (v) {
+      const near = ipv && km({ lat: v.lat, lng: v.lon }, { lat: ipv.lat, lng: ipv.lon }) < 150;
+      const city = near ? ipv.city : 'your location';
+      d.viewerNode = { lat: v.lat, lng: v.lon, city, precise: !!me, ip: ipv?.query, isp: ipv?.isp };
+      if (km(d.viewerNode, d.clientNode) < 50) d.viewerNode = null;
+    }
+  }
   const hops = d.route.hops;
   let last = { lat: c.lat, lng: c.lon };
   hops.forEach((h) => {
@@ -156,8 +181,13 @@ function build(d) {
 
   const pts = [];
   const lbl = new Map();
-  pts.push({ lat: c.lat, lng: c.lon, r: 0.55, color: '#ffffff', label: `<b>Probe</b><br>${c.query}<br>${c.city}, ${c.country}` });
-  lbl.set('c', { lat: c.lat, lng: c.lon, text: `YOU · ${c.city.split(' (')[0]}`, color: '#ffffff', size: 1.1 });
+  pts.push({ lat: c.lat, lng: c.lon, r: 0.55, color: '#ffffff', label: `<b>${local ? 'You (tracer)' : 'Tracer'}</b><br>${c.query}<br>${c.city}, ${c.country}` });
+  lbl.set('c', { lat: c.lat, lng: c.lon, text: `${local ? 'YOU' : 'TRACER'} · ${c.city.split(' (')[0]}`, color: local ? '#ffffff' : '#9fb4e8', size: 1.1 });
+  const v = d.viewerNode;
+  if (v) {
+    pts.push({ lat: v.lat, lng: v.lng, r: 0.65, color: '#ffffff', label: `<b>You</b><br>${v.precise ? 'Browser location' : 'Estimated from your IP'}${v.ip ? '<br>' + v.ip : ''}${v.isp ? '<br>' + esc(v.isp) : ''}` });
+    lbl.set('v', { lat: v.lat, lng: v.lng, text: `YOU · ${v.city}`, color: '#ffffff', size: 1.2 });
+  }
   hops.forEach((h) => {
     if (!h.geo) return;
     pts.push({ lat: h.lat, lng: h.lng, r: 0.32, color: COLORS.tcp, label: `<b>Hop ${h.ttl}</b><br>${h.ip}<br>${esc(h.rdns || '')}<br>${h.geo.city}, ${h.geo.country}<br>${esc(h.geo.as || '')}` });
@@ -168,11 +198,11 @@ function build(d) {
   lbl.set('s', { lat: d.serverNode.lat - 0.6, lng: d.serverNode.lng + 0.4, text: d.anycast ? d.host.toUpperCase() + ' (EDGE)' : d.host.toUpperCase(), color: COLORS.data, size: 1.1 });
   d.dnsNodes.forEach((n) => pts.push({ lat: n.lat, lng: n.lng, r: 0.28, color: COLORS.dns, label: `<b>${n.role}</b><br>${n.name}<br>${n.ip}<br>${n.city}` }));
   const all = nodes.concat(d.dnsNodes);
-  const span = Math.max(...nodes.map((n) => km(n, nodes[0])), 300);
+  const span = Math.max(...nodes.concat(v ? [v] : []).map((n) => km(n, nodes[0])), 300);
   const sc = Math.min(1, Math.max(0.22, span / 3500));
   pts.forEach((p) => { p.r *= sc; });
   const kept = [];
-  [lbl.get('s'), lbl.get('c'), ...[...lbl.entries()].filter(([k]) => k !== 's' && k !== 'c').map(([, v]) => v)].forEach((l) => {
+  [lbl.get('v'), lbl.get('s'), lbl.get('c'), ...[...lbl.entries()].filter(([k]) => !'vsc'.includes(k)).map(([, x]) => x)].filter(Boolean).forEach((l) => {
     if (kept.some((k) => km(k, l) < Math.max(span / 12, 40))) return;
     kept.push({ ...l, size: (l.size ?? 0.9) * sc });
   });
@@ -180,6 +210,8 @@ function build(d) {
   d.labels = kept;
   d.routeArcs = nodes.slice(1).map((n, i) => ({ startLat: nodes[i].lat, startLng: nodes[i].lng, endLat: n.lat, endLng: n.lng,
     color: COLORS.route, stroke: 0.25, dashLength: 1, dashGap: 0, initialGap: 0, animate: 0, static: true }));
+  if (v) d.routeArcs.push({ startLat: v.lat, startLng: v.lng, endLat: c.lat, endLng: c.lon, color: 'rgba(255,255,255,0.55)',
+    stroke: 0.3, dashLength: 0.02, dashGap: 0.015, initialGap: 0, animate: 0, autoScale: 0.25, static: true });
 }
 
 /* ---------- rendering helpers ---------- */
@@ -224,7 +256,8 @@ async function animate(d) {
   $('log').innerHTML = '';
   $('replay').disabled = true;
   renderHops(d); renderStats(d); renderWaterfall(d.http, d.dns);
-  const mid = midpoint(d.nodes.concat(d.dnsNodes));
+  const vn = d.viewerNode ? [d.viewerNode] : [];
+  const mid = midpoint(d.nodes.concat(d.dnsNodes, vn));
   world.pointOfView({ lat: mid.lat, lng: mid.lng, altitude: mid.alt }, 1500 / speed);
   await sleep(1300 / speed);
   const fwd = d.nodes, back = [...d.nodes].reverse();
@@ -233,6 +266,12 @@ async function animate(d) {
   const port = d.port, sport = 40000 + Math.floor(Math.random() * 20000);
   const c = d.clientNode;
   setStatus(`${d.host} · ${d.dns.target_ip} · ${d.route.hops.length} hops · ${Math.round(d.distance).toLocaleString()} km of cable`);
+  if (d.viewerNode) {
+    const v = d.viewerNode;
+    log('#ffffff', `<b>You</b> are in ${esc(v.city)} (${v.precise ? 'browser location' : 'IP estimate'}). Browsers can't send traceroute probes, so this route was measured from the tracer in ${esc(c.name.split(' · ')[1].split(' (')[0])} — dashed line = not measured. Run PacketScope on your own machine to trace from your network.`);
+  } else if (d.viewer?.same_as_probe) {
+    log('#ffffff', `<b>Local mode</b> — the tracer is running on your machine, so every hop below is your real path${me ? ' (pinned to your browser location)' : ''}.`);
+  }
 
   // DNS
   phase('dns'); banner('1 · DNS lookup — where is ' + d.host + '?', COLORS.dns);
@@ -248,7 +287,7 @@ async function animate(d) {
   if (!d.dnsNodes.length) log(COLORS.dns, `Resolved ${esc(d.host)} → <b>${d.dns.target_ip}</b>`);
 
   if (id !== runId) return;
-  const rmid = midpoint(d.nodes);
+  const rmid = midpoint(d.nodes.concat(vn));
   world.pointOfView({ lat: rmid.lat, lng: rmid.lng, altitude: rmid.alt }, 1200 / speed);
   await sleep(900 / speed);
   // TCP

@@ -16,6 +16,10 @@ button:disabled{opacity:.4;cursor:default}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
 .chip{font:12px ui-monospace,Menlo,monospace;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);cursor:pointer;background:rgba(255,255,255,.02)}
 .chip:hover{color:var(--text);border-color:#4b64a8}
+.merow{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px;color:var(--muted)}
+.loc{background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--text);padding:4px 11px;font-size:12px;font-weight:500;border-radius:999px}
+.loc:hover{border-color:#4b64a8}
+.loc.on{border-color:#4dff9a;color:#4dff9a}
 .status{margin-top:8px;color:var(--muted);font-size:12px;min-height:18px}
 .status.err{color:#ff7a7a}
 .left,.right{top:200px;bottom:76px;width:340px;padding:12px 14px;overflow:hidden;display:flex;flex-direction:column}
