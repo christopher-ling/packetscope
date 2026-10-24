@@ -15,6 +15,14 @@ STATIC = ROOT / "static"
 HOST_RE = re.compile(r"^(?=.{1,253}$)([a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$")
 GEO_CACHE: dict = {}
 SELF_INFO: dict = {}
+AWS_REGIONS = {
+    "us-west-2": (45.84, -119.70, "Boardman, Oregon (AWS us-west-2)"),
+    "us-west-1": (37.35, -121.96, "San Jose, California (AWS us-west-1)"),
+    "us-east-1": (39.04, -77.49, "Ashburn, Virginia (AWS us-east-1)"),
+    "us-east-2": (40.00, -83.00, "Columbus, Ohio (AWS us-east-2)"),
+    "eu-west-1": (53.35, -6.26, "Dublin, Ireland (AWS eu-west-1)"),
+    "eu-central-1": (50.11, 8.68, "Frankfurt, Germany (AWS eu-central-1)"),
+}
 
 
 def parse_target(raw: str):
@@ -211,7 +219,14 @@ async def trace_handler(request: web.Request):
             h["geo"] = geo.get(h["ip"])
             h["rdns"] = names.get(h["ip"])
             h["private"] = not is_public(h["ip"])
-    await send("route", {"hops": hops, "target_ip": ip})
+    probe = None
+    for h in hops:
+        m = re.search(r"\.((?:us|eu|ap|ca|sa)-[a-z]+-\d)\.compute\.internal", h.get("rdns") or "")
+        if m and m.group(1) in AWS_REGIONS:
+            lat, lon, city = AWS_REGIONS[m.group(1)]
+            probe = {"lat": lat, "lon": lon, "city": city}
+            break
+    await send("route", {"hops": hops, "target_ip": ip, "probe": probe})
     await send("http", await http_task)
     await send("done", {})
     return resp

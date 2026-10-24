@@ -109,6 +109,7 @@ function start() {
 
 /* ---------- model ---------- */
 function build(d) {
+  if (d.route.probe) d.client = { ...d.client, ...d.route.probe };
   const c = d.client;
   d.clientNode = { lat: c.lat, lng: c.lon, name: `You (probe) · ${c.city}`, ip: c.query, cc: c.countryCode, kind: 'client' };
   const hops = d.route.hops;
@@ -116,7 +117,7 @@ function build(d) {
   hops.forEach((h) => {
     if (!h.geo || h.best == null) return;
     const minMs = (km(d.clientNode, { lat: h.geo.lat, lng: h.geo.lon }) * 2) / 200;
-    if (h.best < minMs * 0.8 && minMs > 3) { h.anycast = { claimed: h.geo, minMs }; h.geo = null; }
+    if (h.best < minMs * 0.6 && minMs > 10) { h.anycast = { claimed: h.geo, minMs }; h.geo = null; }
   });
   const tgtHop = hops[hops.length - 1];
   if (tgtHop.anycast || (!tgtHop.geo && d.dns.geo[d.dns.target_ip])) {
@@ -124,7 +125,7 @@ function build(d) {
     if (g && !tgtHop.anycast) {
       const minMs = (km(d.clientNode, { lat: g.lat, lng: g.lon }) * 2) / 200;
       const rtt = [...hops].reverse().find((h) => h.best != null)?.best;
-      if (rtt != null && rtt < minMs * 0.8 && minMs > 3) tgtHop.anycast = { claimed: g, minMs };
+      if (rtt != null && rtt < minMs * 0.6 && minMs > 10) tgtHop.anycast = { claimed: g, minMs };
     }
   }
   d.anycast = !!tgtHop.anycast;
@@ -134,7 +135,8 @@ function build(d) {
     h.lat = last.lat; h.lng = last.lng;
   });
   const tgt = hops[hops.length - 1];
-  if (!tgt.geo && lastGeo) { tgt.lat = lastGeo.geo.lat; tgt.lng = lastGeo.geo.lon; }
+  if (!tgt.geo && lastGeo && !tgt.anycast) { tgt.lat = lastGeo.geo.lat; tgt.lng = lastGeo.geo.lon; }
+  if (km(tgt, { lat: c.lat, lng: c.lon }) < 60) { tgt.lat = c.lat - 1.2; tgt.lng = c.lon + 1.8; }
   // path nodes: collapse consecutive hops at the same spot
   const nodes = [{ ...d.clientNode, hopIdx: -1 }];
   hops.forEach((h, i) => {
@@ -155,7 +157,7 @@ function build(d) {
   const pts = [];
   const lbl = new Map();
   pts.push({ lat: c.lat, lng: c.lon, r: 0.55, color: '#ffffff', label: `<b>Probe</b><br>${c.query}<br>${c.city}, ${c.country}` });
-  lbl.set('c', { lat: c.lat, lng: c.lon, text: `YOU · ${c.city}`, color: '#ffffff', size: 1.1 });
+  lbl.set('c', { lat: c.lat, lng: c.lon, text: `YOU · ${c.city.split(' (')[0]}`, color: '#ffffff', size: 1.1 });
   hops.forEach((h) => {
     if (!h.geo) return;
     pts.push({ lat: h.lat, lng: h.lng, r: 0.32, color: COLORS.tcp, label: `<b>Hop ${h.ttl}</b><br>${h.ip}<br>${esc(h.rdns || '')}<br>${h.geo.city}, ${h.geo.country}<br>${esc(h.geo.as || '')}` });
@@ -163,7 +165,7 @@ function build(d) {
     if (!lbl.has(key) && km(h, d.clientNode) > 25 && km(h, tgt) > 25) lbl.set(key, { lat: h.lat, lng: h.lng, text: h.geo.city });
   });
   pts.push({ lat: d.serverNode.lat, lng: d.serverNode.lng, r: 0.6, color: COLORS.data, label: `<b>${esc(d.host)}</b><br>${d.dns.target_ip}` });
-  lbl.set('s', { lat: d.serverNode.lat, lng: d.serverNode.lng + 0.4, text: d.host.toUpperCase(), color: COLORS.data, size: 1.1 });
+  lbl.set('s', { lat: d.serverNode.lat - 0.6, lng: d.serverNode.lng + 0.4, text: d.anycast ? d.host.toUpperCase() + ' (EDGE)' : d.host.toUpperCase(), color: COLORS.data, size: 1.1 });
   d.dnsNodes.forEach((n) => pts.push({ lat: n.lat, lng: n.lng, r: 0.28, color: COLORS.dns, label: `<b>${n.role}</b><br>${n.name}<br>${n.ip}<br>${n.city}` }));
   d.points = pts;
   d.labels = [...lbl.values()];
@@ -237,6 +239,9 @@ async function animate(d) {
   if (!d.dnsNodes.length) log(COLORS.dns, `Resolved ${esc(d.host)} → <b>${d.dns.target_ip}</b>`);
 
   if (id !== runId) return;
+  const rmid = midpoint(d.nodes);
+  world.pointOfView({ lat: rmid.lat, lng: rmid.lng, altitude: rmid.alt }, 1200 / speed);
+  await sleep(900 / speed);
   // TCP
   phase('tcp'); banner('2 · TCP 3-way handshake', COLORS.tcp);
   log(COLORS.tcp, `<b>SYN</b> ${c.ip}:${sport} → ${d.dns.target_ip}:${port} seq=0 win=64240`);
@@ -298,7 +303,7 @@ function midpoint(nodes) {
   const lng = Math.atan2(v[1], v[0]) * 180 / Math.PI;
   const lat = Math.atan2(v[2], Math.hypot(v[0], v[1])) * 180 / Math.PI;
   const spread = Math.max(...nodes.map((n) => km(n, { lat, lng })));
-  return { lat, lng, alt: Math.min(3.2, Math.max(0.9, spread / 3200 + 0.5)) };
+  return { lat, lng, alt: Math.min(3.2, Math.max(0.45, spread / 3000 + 0.35)) };
 }
 
 /* ---------- panels ---------- */
