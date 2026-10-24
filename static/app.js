@@ -167,8 +167,17 @@ function build(d) {
   pts.push({ lat: d.serverNode.lat, lng: d.serverNode.lng, r: 0.6, color: COLORS.data, label: `<b>${esc(d.host)}</b><br>${d.dns.target_ip}` });
   lbl.set('s', { lat: d.serverNode.lat - 0.6, lng: d.serverNode.lng + 0.4, text: d.anycast ? d.host.toUpperCase() + ' (EDGE)' : d.host.toUpperCase(), color: COLORS.data, size: 1.1 });
   d.dnsNodes.forEach((n) => pts.push({ lat: n.lat, lng: n.lng, r: 0.28, color: COLORS.dns, label: `<b>${n.role}</b><br>${n.name}<br>${n.ip}<br>${n.city}` }));
+  const all = nodes.concat(d.dnsNodes);
+  const span = Math.max(...all.map((n) => km(n, nodes[0])), 300);
+  const sc = Math.min(1, Math.max(0.22, span / 3500));
+  pts.forEach((p) => { p.r *= sc; });
+  const kept = [];
+  [...lbl.values()].forEach((l) => {
+    if (kept.some((k) => km(k, l) < span / 12)) return;
+    kept.push({ ...l, size: (l.size ?? 0.9) * sc });
+  });
   d.points = pts;
-  d.labels = [...lbl.values()];
+  d.labels = kept;
   d.routeArcs = nodes.slice(1).map((n, i) => ({ startLat: nodes[i].lat, startLng: nodes[i].lng, endLat: n.lat, endLng: n.lng,
     color: COLORS.route, stroke: 0.25, dashLength: 1, dashGap: 0, initialGap: 0, animate: 0, static: true }));
 }
@@ -303,7 +312,7 @@ function midpoint(nodes) {
   const lng = Math.atan2(v[1], v[0]) * 180 / Math.PI;
   const lat = Math.atan2(v[2], Math.hypot(v[0], v[1])) * 180 / Math.PI;
   const spread = Math.max(...nodes.map((n) => km(n, { lat, lng })));
-  return { lat, lng, alt: Math.min(3.2, Math.max(0.45, spread / 3000 + 0.35)) };
+  return { lat, lng, alt: Math.min(3.2, Math.max(0.7, spread / 3000 + 0.4)) };
 }
 
 /* ---------- panels ---------- */
