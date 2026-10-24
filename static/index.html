@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PacketScope — watch your packets cross the internet</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<div id="globe"></div>
+
+<header class="panel top">
+  <div class="brand"><span class="dot"></span>PacketScope</div>
+  <form id="form">
+    <input id="url" autocomplete="off" spellcheck="false" placeholder="Enter a website — e.g. github.com" value="">
+    <button id="go" type="submit">Trace</button>
+  </form>
+  <div class="chips" id="chips"></div>
+  <div class="status" id="status">Type a URL to watch a real request travel the internet.</div>
+</header>
+
+<aside class="panel left" id="left">
+  <h3>Request timeline <span class="muted" id="totalMs"></span></h3>
+  <div id="waterfall" class="waterfall"></div>
+  <h3>Packet log</h3>
+  <div id="log" class="log"></div>
+</aside>
+
+<aside class="panel right" id="right">
+  <h3>Route <span class="muted" id="hopCount"></span></h3>
+  <div id="stats" class="stats"></div>
+  <div id="hops" class="hops"></div>
+</aside>
+
+<footer class="panel bottom">
+  <div class="legend" id="legend"></div>
+  <div class="controls">
+    <label>Speed <input id="speed" type="range" min="0.25" max="3" step="0.25" value="1"></label>
+    <button id="replay" disabled>Replay</button>
+  </div>
+</footer>
+
+<div id="phaseBanner" class="phase-banner"></div>
+
+<script src="vendor/globe.gl.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
