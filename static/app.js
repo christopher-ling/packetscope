@@ -168,12 +168,12 @@ function build(d) {
   lbl.set('s', { lat: d.serverNode.lat - 0.6, lng: d.serverNode.lng + 0.4, text: d.anycast ? d.host.toUpperCase() + ' (EDGE)' : d.host.toUpperCase(), color: COLORS.data, size: 1.1 });
   d.dnsNodes.forEach((n) => pts.push({ lat: n.lat, lng: n.lng, r: 0.28, color: COLORS.dns, label: `<b>${n.role}</b><br>${n.name}<br>${n.ip}<br>${n.city}` }));
   const all = nodes.concat(d.dnsNodes);
-  const span = Math.max(...all.map((n) => km(n, nodes[0])), 300);
+  const span = Math.max(...nodes.map((n) => km(n, nodes[0])), 300);
   const sc = Math.min(1, Math.max(0.22, span / 3500));
   pts.forEach((p) => { p.r *= sc; });
   const kept = [];
-  [...lbl.values()].forEach((l) => {
-    if (kept.some((k) => km(k, l) < span / 12)) return;
+  [lbl.get('s'), lbl.get('c'), ...[...lbl.entries()].filter(([k]) => k !== 's' && k !== 'c').map(([, v]) => v)].forEach((l) => {
+    if (kept.some((k) => km(k, l) < Math.max(span / 12, 40))) return;
     kept.push({ ...l, size: (l.size ?? 0.9) * sc });
   });
   d.points = pts;
