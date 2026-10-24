@@ -269,6 +269,11 @@ async function animate(d) {
   if (d.viewerNode) {
     const v = d.viewerNode;
     log('#ffffff', `<b>You</b> are in ${esc(v.city)} (${v.precise ? 'browser location' : 'IP estimate'}). Browsers can't send traceroute probes, so this route was measured from the tracer in ${esc(c.name.split(' · ')[1].split(' (')[0])} — dashed line = not measured. Run PacketScope on your own machine to trace from your network.`);
+  }
+  if (d.route.hops.length > 1 && d.route.hops.slice(0, -1).every((h) => !h.ip)) {
+    log('#ff7a7a', `<b>Every router on this network stayed silent.</b> Your network (or VPN) blocks the ICMP "time exceeded" replies traceroute relies on, so only the server is visible. Try another network, e.g. a phone hotspot, to reveal the hops.`);
+  }
+  if (d.viewerNode) {
   } else if (d.viewer?.same_as_probe) {
     log('#ffffff', `<b>Local mode</b> — the tracer is running on your machine, so every hop below is your real path${me ? ' (pinned to your browser location)' : ''}.`);
   }

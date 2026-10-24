@@ -73,7 +73,29 @@ CITY_CODES = {
 CODE_RE = re.compile(r"(?:^|[.\-])([a-z]{3})\d{0,2}(?=[.\-]|$)")
 
 
+ALIAS_CODES = {"ashb": "iad", "wash": "was", "atla": "atl", "56mar": "atl", "chic": "chi", "newy": "nyc", "losa": "lax",
+               "seat": "sea", "hous": "hou", "sunn": "sjc", "phil": "phl", "dall": "dal", "denv": "den", "amst": "ams",
+               "lond": "lon", "fran": "fra", "pari": "par", "toky": "tyo", "sing": "sin"}
+EQUINIX = {"dc": "iad", "ch": "chi", "ny": "nyc", "sv": "sjc", "la": "lax", "da": "dal", "at": "atl", "se": "sea",
+           "mi": "mia", "ld": "lon", "am": "ams", "fr": "fra", "pa": "par", "ty": "tyo", "sg": "sin", "hk": "hkg"}
+
+
 def rdns_location(name):
+    hit = _rdns_location(name)
+    if hit or not name:
+        return hit
+    labels = name.lower().split(".")
+    for tok in re.split(r"[.\-]", ".".join(labels[:-2])):
+        alias = ALIAS_CODES.get(tok.rstrip("0123456789")) or ALIAS_CODES.get(tok)
+        if alias:
+            return tok.rstrip("0123456789"), CITY_CODES[alias]
+    m = re.search(r"eqix-([a-z]{2})\d+", name.lower())
+    if m and m.group(1) in EQUINIX:
+        return "eqix-" + m.group(1), CITY_CODES[EQUINIX[m.group(1)]]
+    return None
+
+
+def _rdns_location(name):
     if not name:
         return None
     labels = name.lower().split(".")
