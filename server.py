@@ -1,6 +1,8 @@
 import asyncio
 import ipaddress
 import json
+import os
+import shutil
 import re
 import socket
 import time
@@ -122,7 +124,9 @@ async def dns_trace(host: str):
 
 
 async def traceroute(ip: str, port: int):
-    out = await run("sudo", "-n", "mtr", "-j", "-n", "-c", "3", "-i", "0.2", "--gracetime", "1",
+    mtr = shutil.which("mtr", path=os.environ.get("PATH", "") + ":/opt/homebrew/sbin:/usr/local/sbin:/usr/sbin") or "mtr"
+    pre = [] if os.geteuid() == 0 else ["sudo", "-n"]
+    out = await run(*pre, mtr, "-j", "-n", "-c", "3", "-i", "0.2", "--gracetime", "1",
                     "-T", "-P", str(port), "-m", "30", ip, timeout=40)
     try:
         hubs = json.loads(out)["report"]["hubs"]
