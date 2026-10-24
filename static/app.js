@@ -342,7 +342,7 @@ function renderHops(d) {
     const where = h.anycast && i < hops.length - 1 ? `geo says ${esc(h.anycast.claimed.city)}, ${esc(h.anycast.claimed.countryCode)}, but a ${h.best.toFixed(1)}ms reply is impossible from there — location unreliable` : h.anycast ? `registered in ${esc(h.anycast.claimed.city)}, ${esc(h.anycast.claimed.countryCode)} — but ${h.best.toFixed(1)}ms is faster than light allows (min ${h.anycast.minMs.toFixed(0)}ms). Anycast/CDN edge near you.` : g ? `${esc(g.city)}, ${esc(g.country)}` : (h.private ? 'private network' : 'unknown location');
     const tags = (h.private ? '<span class="tag">private</span>' : '') + (h.anycast ? `<span class="tag" style="color:var(--dns)">${i === hops.length - 1 ? 'anycast' : 'geo?'}</span>` : '') + (i === hops.length - 1 ? '<span class="tag" style="color:var(--data)">server</span>' : '');
     return `<div class="hop" data-i="${i}"><span class="n">${h.ttl}</span><div><div class="ip">${h.ip}${tags}</div>
-      <div class="meta">${where}${(g || h.anycast?.claimed)?.as ? ' · ' + esc((g || h.anycast.claimed).as) : ''}</div>${h.rdns ? `<div class="meta">${esc(h.rdns)}</div>` : ''}
+      <div class="meta">${where}${g?.hint ? ` <span class="tag" title="Located from router name code ${g.hint}${g.db_city ? '; geo database said ' + esc(g.db_city) : ''}">via ${g.hint}</span>` : ''}${(g || h.anycast?.claimed)?.as ? ' · ' + esc((g || h.anycast.claimed).as) : ''}</div>${h.rdns ? `<div class="meta">${esc(h.rdns)}</div>` : ''}
       <div class="bar" style="width:${((h.avg || 0) / maxMs) * 100}%"></div></div><span class="ms">${h.avg != null ? h.avg.toFixed(1) + 'ms' : ''}</span></div>`;
   }).join('');
   $('hops').querySelectorAll('.hop').forEach((el) => el.onclick = () => {

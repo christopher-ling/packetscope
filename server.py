@@ -49,6 +49,38 @@ def is_public(ip: str) -> bool:
     return a.is_global
 
 
+CITY_CODES = {
+    "iad": (38.95, -77.45, "Ashburn, US"), "was": (38.90, -77.04, "Washington DC, US"), "dca": (38.90, -77.04, "Washington DC, US"),
+    "ash": (39.04, -77.49, "Ashburn, US"), "nyc": (40.71, -74.01, "New York, US"), "jfk": (40.64, -73.78, "New York, US"),
+    "ewr": (40.69, -74.17, "Newark, US"), "lga": (40.71, -74.01, "New York, US"), "bos": (42.36, -71.06, "Boston, US"),
+    "phl": (39.95, -75.17, "Philadelphia, US"), "atl": (33.75, -84.39, "Atlanta, US"), "mia": (25.76, -80.19, "Miami, US"),
+    "ord": (41.88, -87.63, "Chicago, US"), "chi": (41.88, -87.63, "Chicago, US"), "dfw": (32.78, -96.80, "Dallas, US"),
+    "dal": (32.78, -96.80, "Dallas, US"), "hou": (29.76, -95.37, "Houston, US"), "den": (39.74, -104.99, "Denver, US"),
+    "phx": (33.45, -112.07, "Phoenix, US"), "slc": (40.76, -111.89, "Salt Lake City, US"), "lax": (34.05, -118.24, "Los Angeles, US"),
+    "sjc": (37.34, -121.89, "San Jose, US"), "sfo": (37.62, -122.38, "San Francisco, US"), "pao": (37.44, -122.14, "Palo Alto, US"),
+    "sea": (47.61, -122.33, "Seattle, US"), "pdx": (45.52, -122.68, "Portland, US"), "yyz": (43.65, -79.38, "Toronto, CA"),
+    "tor": (43.65, -79.38, "Toronto, CA"), "yvr": (49.28, -123.12, "Vancouver, CA"), "ymq": (45.50, -73.57, "Montreal, CA"),
+    "lon": (51.51, -0.13, "London, GB"), "lhr": (51.47, -0.45, "London, GB"), "ams": (52.37, 4.90, "Amsterdam, NL"),
+    "fra": (50.11, 8.68, "Frankfurt, DE"), "par": (48.86, 2.35, "Paris, FR"), "cdg": (49.01, 2.55, "Paris, FR"),
+    "mad": (40.42, -3.70, "Madrid, ES"), "mil": (45.46, 9.19, "Milan, IT"), "sto": (59.33, 18.07, "Stockholm, SE"),
+    "tyo": (35.68, 139.69, "Tokyo, JP"), "nrt": (35.77, 140.39, "Tokyo, JP"), "osa": (34.69, 135.50, "Osaka, JP"),
+    "hkg": (22.32, 114.17, "Hong Kong, HK"), "sin": (1.35, 103.82, "Singapore, SG"), "syd": (-33.87, 151.21, "Sydney, AU"),
+    "bom": (19.08, 72.88, "Mumbai, IN"), "sao": (-23.55, -46.63, "Sao Paulo, BR"), "gru": (-23.43, -46.47, "Sao Paulo, BR"),
+    "jnb": (-26.20, 28.05, "Johannesburg, ZA"), "sel": (37.57, 126.98, "Seoul, KR"), "icn": (37.46, 126.44, "Seoul, KR"),
+}
+CODE_RE = re.compile(r"(?:^|[.\-])([a-z]{3})\d{0,2}(?=[.\-]|$)")
+
+
+def rdns_location(name):
+    if not name:
+        return None
+    labels = name.lower().split(".")
+    for m in CODE_RE.finditer(".".join(labels[:-2]) if len(labels) > 2 else ""):
+        if m.group(1) in CITY_CODES:
+            return m.group(1), CITY_CODES[m.group(1)]
+    return None
+
+
 async def run(*args, timeout=30):
     p = await asyncio.create_subprocess_exec(
         *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -219,6 +251,16 @@ async def trace_handler(request: web.Request):
             h["geo"] = geo.get(h["ip"])
             h["rdns"] = names.get(h["ip"])
             h["private"] = not is_public(h["ip"])
+            hint = rdns_location(h["rdns"]) if not h["private"] else None
+            if hint:
+                code, (lat, lon, city) = hint
+                g = dict(h["geo"] or {})
+                if g:
+                    g["db_city"] = g.get("city")
+                c, cc = city.split(", ")
+                g.update({"lat": lat, "lon": lon, "city": c, "country": g.get("country") if g.get("countryCode") == cc else cc,
+                          "countryCode": cc, "hint": code.upper()})
+                h["geo"] = g
     probe = None
     for h in hops:
         m = re.search(r"\.((?:us|eu|ap|ca|sa)-[a-z]+-\d)\.compute\.internal", h.get("rdns") or "")
